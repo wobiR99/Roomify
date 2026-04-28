@@ -2,6 +2,8 @@ import { CheckCircle2, ImageIcon, UploadIcon } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useOutletContext, useNavigate } from "react-router";
 import {
+  ALLOWED,
+  MAX_BYTES,
   PROGRESS_INTERVAL_MS,
   PROGRESS_STEP,
   REDIRECT_DELAY_MS,
@@ -16,15 +18,34 @@ const Upload = ({ onComplete }: UploadProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [base64, setBase64] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const { isSignedIn } = useOutletContext<AuthContext>();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const validateAndSetFile = (file: File): boolean => {
+    setError(null);
+
+    if (!ALLOWED.includes(file.type)) {
+      setError("Please upload a valid image file (JPG or PNG).");
+      return false;
+    }
+
+    if (file.size > MAX_BYTES) {
+      setError("File size exceeds the 50MB limit.");
+      return false;
+    }
+
+    setFile(file);
+    return true;
+  };
+
   const processFile = (file: File) => {
     if (!isSignedIn) return;
-    setFile(file);
+
+    if (!validateAndSetFile(file)) return;
 
     const reader = new FileReader();
     reader.onerror = () => {
@@ -35,6 +56,9 @@ const Upload = ({ onComplete }: UploadProps) => {
       const base64Data = e.target?.result as string;
       setBase64(base64Data);
 
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
       intervalRef.current = setInterval(() => {
         setProgress((prev) => Math.min(prev + PROGRESS_STEP, 100));
       }, PROGRESS_INTERVAL_MS);
@@ -57,7 +81,7 @@ const Upload = ({ onComplete }: UploadProps) => {
     if (!isSignedIn) return;
 
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.type.startsWith("image/")) {
+    if (droppedFile) {
       processFile(droppedFile);
     }
   };
@@ -103,7 +127,7 @@ const Upload = ({ onComplete }: UploadProps) => {
           <input
             type="file"
             className="drop-input"
-            accept=".jpg,.jpeg,.png"
+            accept={ALLOWED.join(",")}
             disabled={!isSignedIn}
             onChange={handleChange}
           />
@@ -112,6 +136,15 @@ const Upload = ({ onComplete }: UploadProps) => {
             <div className="drop-icon">
               <UploadIcon size={20} />
             </div>
+
+            {error && (
+              <p
+                className="error-message"
+                style={{ color: "#ef4444", marginBottom: "8px" }}
+              >
+                {error}
+              </p>
+            )}
 
             <p>
               {isSignedIn
